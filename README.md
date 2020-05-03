@@ -10,7 +10,7 @@ This project is for testing purposes and has not been security audited.
 Running the server:
 
     sshagentca -h
-    sshagentca -pvt <privatekey> -ca <caprivatekey> -a <authorized_keys>
+    sshagentca -t <privatekey> -c <caprivatekey> -a <authorized_keys>
                [-i <ipaddress>] [-p <port>] settings.yaml
 
 Example client usage:
@@ -39,6 +39,9 @@ Example client usage:
     # the agent if needed, for example for sudo authentication, if configured
     ssh userthatcansudo@remoteserver -A
 
+The login username that the client provides when connecting to `sshagentca`
+is ignored - it does not have to match the `name:` in `settings.yaml`.
+
 Certificates from `sshagentca` can be conveniently used with
 [pam-ussh](https://github.com/uber/pam-ussh) to control sudo privileges
 on suitably configured servers.
@@ -46,6 +49,14 @@ on suitably configured servers.
 Please refer to the specification at PROTOCOL.certkeys at
 https://www.openssh.com/specs.html and the related go documentation at
 https://godoc.org/golang.org/x/crypto/ssh.
+
+## Building
+
+```
+go get github.com/rorycl/sshagentca
+```
+
+The binary will be installed in `~/go/bin/sshagentca` by default.
 
 ## Details
 
@@ -71,8 +82,15 @@ agent. This response will be to insert an ssh user certificate into the
 forwarded agent which is signed by `caprivatekey` with the parameters
 set out in `settings.yaml` and restrictions as noted below.
 
-The inserted certificate is generated from an ECDSA key pair with a
-P-384 curve for fast key generation.
+The inserted certificate is generated from a freshly-minted ECDSA key pair
+with a P-384 curve for fast key generation.  The CA key you provide to
+sign the certificate may be a different type (e.g. RSA).
+
+Clients can authenticate to sshagentca using any key type supported by go's
+`x/crypto/ssh` package.  This includes the ecdsa-sk key used with U2F
+security keys, introduced in OpenSSH 8.2.  Hence you can use a physical U2F
+token with an OpenSSH 8.2 client to authenticate to sshagentca, whilst the
+certificates it issues will work with older versions of sshd.
 
 ## Certificate Restrictions
 
@@ -89,7 +107,8 @@ out for the specific connecting client public key from the
 `user_principals` settings.
 
 The `valid after` timestamp is set according to the `duration` settings
-parameter, specified in minutes.
+parameter, specified in minutes.  Durations longer than 24 hours are
+rejected.
 
 ## Key generation
 
@@ -109,14 +128,32 @@ which you wish to grant certificate-authenticated access. For example:
 
     TrustedUserCAKeys /etc/ssh/ca.pub
 
-Where an AuthorizedPrincipalsFile must also be configured, such as:
+Optionally, an AuthorizedPrincipalsFile may also be configured, such as:
 
     AuthorizedPrincipalsFile /etc/ssh/ca_principals
 
-The AuthorizedPrincipalsFile contains entries for the users you wish the
-certificate to be valid for. To log in, the user is required to be
-specified in the AuthorizedPrincipalsFile, the certificate principals
-(set in the yaml file) and the user for the connecting ssh client.
+This overrides OpenSSH's default certificate check, which is to require the
+login username exists as one of the principals in the certificate.
+
+When you specify AuthorizedPrincipalsFile, the user is permitted to login if
+their certificate contains any of the principals listed in that file.  Be
+aware that this will allow the user to login as *any* username which exists
+on the server, including "root".
+
+For more fine-grained control you can configure a script which outputs a
+list of authorized principals depending on the user that is logging in:
+
+    AuthorizedPrincipalsCommand /etc/ssh/authprinc.sh %u
+    AuthorizedPrincipalsCommandUser nobody
+
+Example:
+
+```
+#!/bin/sh -eu
+echo "$1@$(hostname -f)"
+echo "$1@+webserver"
+echo "$1@+all"
+```
 
 The use of principals to provide "zone" based access to servers is set out at
 https://engineering.fb.com/security/scalable-and-secure-access-with-ssh/ 
