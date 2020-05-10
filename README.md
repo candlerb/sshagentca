@@ -109,8 +109,7 @@ out for the specific connecting client public key from the
 `user_principals` settings.
 
 The `valid after` timestamp is set according to the `duration` settings
-parameter, specified in minutes.  Durations longer than 24 hours are
-rejected.
+parameter.  Durations longer than 24 hours are rejected.
 
 ## Key generation
 

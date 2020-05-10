@@ -28,7 +28,7 @@ func addCertToAgent(agentC agent.ExtendedAgent, caKey ssh.Signer, user *util.Use
 	}
 
 	fromT := time.Now().UTC()
-	toT := time.Now().UTC().Add(time.Duration(settings.Validity) * time.Minute)
+	toT := time.Now().UTC().Add(settings.Validity)
 	fmtF := "2006-01-02T15:04"
 	fmtT := "2006-01-02T15:04MST"
 	timeStamp := fmt.Sprintf("from:%s_to:%s", fromT.Format(fmtF), toT.Format(fmtT))
@@ -52,7 +52,7 @@ func addCertToAgent(agentC agent.ExtendedAgent, caKey ssh.Signer, user *util.Use
 	err = agentC.Add(agent.AddedKey{
 		PrivateKey:   privKey,
 		Certificate:  cert,
-		LifetimeSecs: settings.Validity * 60, // minutes to seconds
+		LifetimeSecs: uint32(settings.Validity.Seconds()),
 		Comment:      identifier,
 	})
 	if err != nil {

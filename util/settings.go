@@ -6,9 +6,11 @@ import (
 	"golang.org/x/crypto/ssh"
 	yaml "gopkg.in/yaml.v3"
 	"io/ioutil"
+	"time"
 )
 
-const maxmins uint32 = 24 * 60 // limit max validity to 24 hours
+const minvalidity = 1 * time.Minute
+const maxvalidity = 24 * time.Hour
 
 // Restrict the certificate extensions to those commonly supported as
 // defined at https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.certkeys?annotate=HEAD
@@ -32,7 +34,7 @@ type UserPrincipals struct {
 }
 
 type Settings struct {
-	Validity           uint32            `yaml:"validity"`
+	Validity           time.Duration     `yaml:"validity"`
 	Organisation       string            `yaml:"organisation"`
 	Banner             string            `yaml:"banner"`
 	Extensions         map[string]string `yaml:"extensions,flow"`
@@ -104,10 +106,10 @@ func (s *Settings) buildFPMap() error {
 func (s *Settings) validate() error {
 
 	// check validity period
-	if !(0 < s.Validity) {
-		return errors.New("validity must be >0")
-	} else if s.Validity > maxmins {
-		return errors.New(fmt.Sprintf("validity must be <%d", maxmins))
+	if s.Validity < minvalidity {
+		return errors.New(fmt.Sprintf("validity must be >=%s", minvalidity))
+	} else if s.Validity > maxvalidity {
+		return errors.New(fmt.Sprintf("validity must be <=%s", maxvalidity))
 	}
 
 	// check extensions meet permittedExtensions

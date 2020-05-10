@@ -17,7 +17,7 @@ func TestSettingsParse2(t *testing.T) {
 	if err != nil {
 		t.Errorf("Could not parse yaml %v", err)
 	}
-	settings.Validity = 0
+	settings.Validity = minvalidity - 1
 	err = settings.validate()
 	t.Logf("Error (expected): %s", err)
 	if err == nil {
@@ -30,7 +30,7 @@ func TestSettingsParse3(t *testing.T) {
 	if err != nil {
 		t.Errorf("Could not parse yaml %v", err)
 	}
-	settings.Validity = maxmins + 1
+	settings.Validity = maxvalidity + 1
 	err = settings.validate()
 	t.Logf("Error (expected): %s", err)
 	if err == nil {

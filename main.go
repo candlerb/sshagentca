@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	flags "github.com/jessevdk/go-flags"
 	"github.com/candlerb/sshagentca/util"
+	flags "github.com/jessevdk/go-flags"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
 	"net"

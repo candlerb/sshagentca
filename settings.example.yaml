@@ -1,9 +1,9 @@
 # sshagentca example settings file
 
-# certificate validity period in minutes periods of more than 24 hours are
+# certificate validity. periods of more than 24 hours are
 # not permitted by this implementation. certificates with the 'forever'
 # validity string are also not supported.
-validity: 180 # 3 hours
+validity: 3h
 
 # organisation name, used in certificate identifer (which shows in
 # /var/log/auth.log on debian derivate hosts authorising user certificates; also
