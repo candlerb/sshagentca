@@ -3,14 +3,14 @@ package main
 import (
 	"fmt"
 	flags "github.com/jessevdk/go-flags"
-	"github.com/rorycl/sshagentca/util"
+	"github.com/candlerb/sshagentca/util"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
 	"net"
 	"os"
 )
 
-const VERSION = "0.0.4-beta"
+const VERSION = "0.0.5-candlerb"
 const usage = `<options> <yamlfile>
 
 SSH Agent CA version %s

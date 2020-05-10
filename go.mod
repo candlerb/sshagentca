@@ -1,4 +1,4 @@
-module github.com/rorycl/sshagentca
+module github.com/candlerb/sshagentca
 
 go 1.14
 

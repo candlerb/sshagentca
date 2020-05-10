@@ -2,7 +2,7 @@
 
 # sshagentca
 
-version 0.0.4-beta : 15 April 2020
+version 0.0.5-candlerb : 10 May 2020
 
 A proof-of-concept project to add ssh user certificates to forwarded ssh
 agents using go's ssh packages.
@@ -55,7 +55,7 @@ https://godoc.org/golang.org/x/crypto/ssh.
 ## Building
 
 ```
-go get github.com/rorycl/sshagentca
+go get github.com/candlerb/sshagentca
 ```
 
 The binary will be installed in `~/go/bin/sshagentca` by default.

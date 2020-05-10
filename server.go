@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/rorycl/sshagentca/util"
+	"github.com/candlerb/sshagentca/util"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/terminal"
