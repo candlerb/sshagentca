@@ -13,8 +13,8 @@ import (
 )
 
 // Serve the SSH Agent Forwarding Certificate Authority Server. The
-// server requires connections to have public keys registered in the
-// authorized keys file and user_principals fingerprints defined in
+// server requires connections to have user_principals plus public key
+// or fingerprint registered in the
 // settings. The handleConnections goroutine prints information to the
 // the client terminal and adds a certificate to the user's ssh
 // forwarded agent.

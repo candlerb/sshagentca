@@ -1,25 +1,21 @@
 package util
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"golang.org/x/crypto/ssh"
 	"testing"
 )
 
 func TestSettingsParse(t *testing.T) {
-	settings, err := SettingsLoad("../settings.example.yaml", "testdata/test_authorized_keys")
+	settings, err := SettingsLoad("../settings.example.yaml")
 	if err != nil {
-		t.Errorf("Could not parse yaml or authorized keys file %v", err)
+		t.Errorf("Could not parse yaml %v", err)
 	}
 	t.Logf("Settings : %+v", settings)
 }
 
 func TestSettingsParse2(t *testing.T) {
-	settings, err := SettingsLoad("../settings.example.yaml", "testdata/test_authorized_keys")
+	settings, err := SettingsLoad("../settings.example.yaml")
 	if err != nil {
-		t.Errorf("Could not parse yaml or authorized keys file %v", err)
+		t.Errorf("Could not parse yaml %v", err)
 	}
 	settings.Validity = 0
 	err = settings.validate()
@@ -30,9 +26,9 @@ func TestSettingsParse2(t *testing.T) {
 }
 
 func TestSettingsParse3(t *testing.T) {
-	settings, err := SettingsLoad("../settings.example.yaml", "testdata/test_authorized_keys")
+	settings, err := SettingsLoad("../settings.example.yaml")
 	if err != nil {
-		t.Errorf("Could not parse yaml or authorized keys file %v", err)
+		t.Errorf("Could not parse yaml %v", err)
 	}
 	settings.Validity = maxmins + 1
 	err = settings.validate()
@@ -43,9 +39,9 @@ func TestSettingsParse3(t *testing.T) {
 }
 
 func TestSettingsParse4(t *testing.T) {
-	settings, err := SettingsLoad("../settings.example.yaml", "testdata/test_authorized_keys")
+	settings, err := SettingsLoad("../settings.example.yaml")
 	if err != nil {
-		t.Errorf("Could not parse yaml or authorized keys file %v", err)
+		t.Errorf("Could not parse yaml %v", err)
 	}
 	settings.Extensions = map[string]string{}
 	err = settings.validate()
@@ -55,9 +51,9 @@ func TestSettingsParse4(t *testing.T) {
 }
 
 func TestSettingsParse5(t *testing.T) {
-	settings, err := SettingsLoad("../settings.example.yaml", "testdata/test_authorized_keys")
+	settings, err := SettingsLoad("../settings.example.yaml")
 	if err != nil {
-		t.Errorf("Could not parse yaml or authorized keys file %v", err)
+		t.Errorf("Could not parse yaml %v", err)
 	}
 	settings.Extensions["permit-agent-forwarding"] = "nonsense"
 	err = settings.validate()
@@ -68,9 +64,9 @@ func TestSettingsParse5(t *testing.T) {
 }
 
 func TestSettingsParse6(t *testing.T) {
-	settings, err := SettingsLoad("../settings.example.yaml", "testdata/test_authorized_keys")
+	settings, err := SettingsLoad("../settings.example.yaml")
 	if err != nil {
-		t.Errorf("Could not parse yaml or authorized keys file %v", err)
+		t.Errorf("Could not parse yaml %v", err)
 	}
 	settings.Extensions["random-extension"] = ""
 	err = settings.validate()
@@ -81,9 +77,9 @@ func TestSettingsParse6(t *testing.T) {
 }
 
 func TestUserSettings1(t *testing.T) {
-	settings, err := SettingsLoad("../settings.example.yaml", "testdata/test_authorized_keys")
+	settings, err := SettingsLoad("../settings.example.yaml")
 	if err != nil {
-		t.Errorf("Could not parse yaml or authorized keys file %v", err)
+		t.Errorf("Could not parse yaml %v", err)
 	}
 	if len(settings.Users) != 2 {
 		t.Errorf("unexpected user length encountered")
@@ -97,11 +93,17 @@ func TestUserSettings1(t *testing.T) {
 }
 
 func TestUserSettings2(t *testing.T) {
-	settings, err := SettingsLoad("../settings.example.yaml", "testdata/test_authorized_keys")
+	settings, err := SettingsLoad("../settings.example.yaml")
 	if err != nil {
-		t.Errorf("Could not parse yaml or authorized keys file %v", err)
+		t.Errorf("Could not parse yaml %v", err)
 	}
 	settings.Users[0].Fingerprint = settings.Users[0].Fingerprint[:49]
+	err = settings.validate()
+	t.Logf("Error (expected): fingerprint length error %s", err)
+	if err == nil {
+		t.Errorf("fingerprint length check failed")
+	}
+	settings.Users[0].Fingerprint = "X"
 	err = settings.validate()
 	t.Logf("Error (expected): fingerprint length error %s", err)
 	if err == nil {
@@ -110,35 +112,9 @@ func TestUserSettings2(t *testing.T) {
 }
 
 func TestUserSettings3(t *testing.T) {
-	settings, err := SettingsLoad("../settings.example.yaml", "testdata/test_authorized_keys")
+	settings, err := SettingsLoad("../settings.example.yaml")
 	if err != nil {
-		t.Errorf("Could not parse yaml or authorized keys file %v", err)
-	}
-	settings.Users[0].Principals = []string{}
-	err = settings.validate()
-	t.Logf("Error (expected): no principals error %s", err)
-	if err == nil {
-		t.Errorf("empty principals error passed")
-	}
-}
-
-func TestUserSettings4(t *testing.T) {
-	settings, err := SettingsLoad("../settings.example.yaml", "testdata/test_authorized_keys")
-	if err != nil {
-		t.Errorf("Could not parse yaml or authorized keys file %v", err)
-	}
-	settings.Users[0].Principals = []string{}
-	err = settings.validate()
-	t.Logf("Error (expected): no principals error %s", err)
-	if err == nil {
-		t.Errorf("empty principals error passed")
-	}
-}
-
-func TestUserSettings5(t *testing.T) {
-	settings, err := SettingsLoad("../settings.example.yaml", "testdata/test_authorized_keys")
-	if err != nil {
-		t.Errorf("Could not parse yaml or authorized keys file %v", err)
+		t.Errorf("Could not parse yaml %v", err)
 	}
 	settings.Users[0].Principals = []string{}
 	err = settings.validate()
@@ -149,9 +125,9 @@ func TestUserSettings5(t *testing.T) {
 }
 
 func TestUserSettings6(t *testing.T) {
-	settings, err := SettingsLoad("../settings.example.yaml", "testdata/test_authorized_keys")
+	settings, err := SettingsLoad("../settings.example.yaml")
 	if err != nil {
-		t.Errorf("Could not parse yaml or authorized keys file %v", err)
+		t.Errorf("Could not parse yaml %v", err)
 	}
 	fp := settings.Users[0].Fingerprint
 	_, err = settings.UserByFingerprint(fp)
@@ -166,39 +142,37 @@ func TestUserSettings6(t *testing.T) {
 }
 
 func TestUserAuth1(t *testing.T) {
-	settings, err := SettingsLoad("../settings.example.yaml", "testdata/test_authorized_keys")
+	settings, err := SettingsLoad("../settings.example.yaml")
 	if err != nil {
-		t.Errorf("Could not parse yaml or authorized keys file %v", err)
+		t.Errorf("Could not parse yaml %v", err)
 	}
-	settings.Users[0].PublicKey = nil
+	settings.Users[0].AuthorizedKey = ""
+	settings.Users[0].Fingerprint = ""
 	err = settings.validate()
 	if err == nil {
-		t.Errorf("nil publickey should not be allowed")
+		t.Errorf("missing fingerprint and authorized_key should not be allowed")
 	}
 }
 
 func TestUserAuth2(t *testing.T) {
-	settings, err := SettingsLoad("../settings.example.yaml", "testdata/test_authorized_keys")
+	settings, err := SettingsLoad("../settings.example.yaml")
 	if err != nil {
-		t.Errorf("Could not parse yaml or authorized keys file %v", err)
+		t.Errorf("Could not parse yaml %v", err)
 	}
-	privKey, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
-	if err != nil {
-		panic("Could not generate test privKey")
+	if settings.Users[0].AuthorizedKey == "" {
+		t.Errorf("This test required an authorized_key to be set")
 	}
-	pubKey, err := ssh.NewPublicKey(&privKey.PublicKey)
-	if err != nil {
-		panic("Could not generate test pubkey")
-	}
-	settings.Users[0].PublicKey = pubKey
+	fp := []byte(settings.Users[0].Fingerprint)
+	fp[30] = '%'
+	settings.Users[0].Fingerprint = string(fp)
 	err = settings.validate()
 	if err == nil {
-		t.Errorf("invalid publickey should not be allowed")
+		t.Errorf("fingerprints not matching authorized_key should not be allowed")
 	}
 }
 
 func TestSettingsValidate(t *testing.T) {
-	_, err := SettingsLoad("../settings.example.yaml", "testdata/test_authorized_keys")
+	_, err := SettingsLoad("../settings.example.yaml")
 	if err != nil {
 		t.Errorf("validation failed")
 	}

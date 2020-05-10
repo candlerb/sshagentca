@@ -26,9 +26,9 @@ var permittedExtensions = map[string]string{
 type UserPrincipals struct {
 	Name string `yaml:"name"`
 	// ssh.FingerprintSHA256
-	Fingerprint string   `yaml:"fingerprint"`
-	Principals  []string `yaml:"principals,flow"`
-	PublicKey   ssh.PublicKey
+	Fingerprint   string   `yaml:"fingerprint"`
+	AuthorizedKey string   `yaml:"authorized_key"`
+	Principals    []string `yaml:"principals,flow"`
 }
 
 type Settings struct {
@@ -41,7 +41,7 @@ type Settings struct {
 }
 
 // Load a settings yaml file into a Settings struct
-func SettingsLoad(yamlFilePath string, authorizedKeysPath string) (Settings, error) {
+func SettingsLoad(yamlFilePath string) (Settings, error) {
 
 	var s = Settings{}
 
@@ -59,28 +59,14 @@ func SettingsLoad(yamlFilePath string, authorizedKeysPath string) (Settings, err
 		return s, errors.New("no valid users found in yaml file")
 	}
 
-	// build map of keys by fingerprint
-	err = s.buildFPMap()
-	if err != nil {
-		return s, err
-	}
-
-	// match fingerprints to authorized_keys file
-	authorized_keys, err := LoadAuthorizedKeys(authorizedKeysPath)
-	if err != nil {
-		return s, err
-	}
-	for key, _ := range authorized_keys {
-		afp := string(ssh.FingerprintSHA256(key))
-		user, ok := s.usersByFingerprint[afp]
-		if !ok {
-			return s, errors.New(fmt.Sprintf("fingerprint for key %s in authorized keys not found", afp))
-		}
-		user.PublicKey = key
-	}
-
 	// run validation
 	err = s.validate()
+	if err != nil {
+		return s, err
+	}
+
+	// build map of keys by fingerprint
+	err = s.buildFPMap()
 	if err != nil {
 		return s, err
 	}
@@ -105,8 +91,8 @@ func (s *Settings) buildFPMap() error {
 		if u.Fingerprint == "" {
 			continue
 		}
-		if _, ok := s.usersByFingerprint[u.Fingerprint]; ok {
-			return errors.New(fmt.Sprintf("duplicate entry for key %s", u.Fingerprint))
+		if u0, ok := s.usersByFingerprint[u.Fingerprint]; ok {
+			return errors.New(fmt.Sprintf("duplicate entry for key %s (users %s and %s)", u.Fingerprint, u0.Name, u.Name))
 		}
 		s.usersByFingerprint[u.Fingerprint] = u
 	}
@@ -114,6 +100,7 @@ func (s *Settings) buildFPMap() error {
 }
 
 // Validate the certificate extensions, validity period and user records
+// Generate fingerprint from authorized_key if required
 func (s *Settings) validate() error {
 
 	// check validity period
@@ -140,21 +127,27 @@ func (s *Settings) validate() error {
 			return errors.New("user provided with empty name")
 		} else if len(v.Principals) == 0 {
 			return errors.New(fmt.Sprintf("user %s provided with no principals", v.Name))
-		} else if v.Fingerprint[:7] != "SHA256:" {
-			return errors.New(fmt.Sprintf("user %s fingerprint does not start with SHA256:", v.Name))
+		}
+
+		if v.AuthorizedKey != "" {
+			keys, err := LoadAuthorizedKeysBytes([]byte(v.AuthorizedKey))
+			if err != nil {
+				return err
+			}
+			if len(keys) != 1 {
+				return errors.New(fmt.Sprintf("user %s unexpected number of keys in authorized_keys entry (%d)", v.Name, len(keys)))
+			}
+			fp := string(ssh.FingerprintSHA256(keys[0]))
+			if v.Fingerprint != "" && v.Fingerprint != fp {
+				return errors.New(fmt.Sprintf("user %s mismatched fingerprint and authorized_key", v.Name))
+			}
+			v.Fingerprint = fp
+		} else if v.Fingerprint == "" {
+			return errors.New(fmt.Sprintf("user %s fingerprint and authorized_key missing", v.Name))
 		} else if len(v.Fingerprint) != 50 {
 			return errors.New(fmt.Sprintf("user %s fingerprint unexpected length", v.Name))
-		}
-	}
-
-	// check all users have a public keys
-	for fp, user := range s.usersByFingerprint {
-		if user.PublicKey == nil {
-			return errors.New(fmt.Sprintf("user %s has empty public key", user.Name))
-		}
-		// some mangling has happened to a key?
-		if fp != string(ssh.FingerprintSHA256(user.PublicKey)) {
-			return errors.New(fmt.Sprintf("user %s public key mismatch", user.Name))
+		} else if v.Fingerprint[:7] != "SHA256:" {
+			return errors.New(fmt.Sprintf("user %s fingerprint does not start with SHA256:", v.Name))
 		}
 	}
 

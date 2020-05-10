@@ -12,7 +12,7 @@ This project is for testing purposes and has not been security audited.
 Running the server:
 
     sshagentca -h
-    sshagentca -t <privatekey> -c <caprivatekey> -a <authorized_keys>
+    sshagentca -t <privatekey> -c <caprivatekey>
                [-i <ipaddress>] [-p <port>] settings.yaml
 
 Example client usage:
@@ -23,9 +23,9 @@ Example client usage:
     ssh-add ~/.ssh/id_test
     <enter password>
 
-    # assuming the public key to id_test is in authorized_keys on the
-    # sshagentca server, and the fingerprint, username and principals
-    # are set out in the settings.yaml file and sshagentca is running on
+    # assuming the public key or fingerprint to id_test is in the
+    # settings.yaml file on the sshagentca server, along with the
+    # certificate name and principals, and sshagentca is running on
     # 10.0.1.99: (it is important to forward the agent)
     ssh -p 2222 10.0.1.99 -A
 
@@ -66,9 +66,9 @@ The server requires an ssh private key and ssh certificate authority
 private key, with password protected private keys. The server will
 prompt for passwords on startup.
 
-The server requires an `authorized_keys` file with at least one valid
-entry. Each entry also requires per-key `user_principals` settings in
-the settings yaml file.
+Each user requires `name and `user_principals` settings in
+the settings yaml file, and either `authorized_key` or `fingerprint`.
+If both are supplied, they must match.
 
 The server will run on the specified IP address and port, by default
 0.0.0.0:2222.
@@ -79,7 +79,7 @@ the prompt received by the client and the `user_principals` settings
 noted above.
 
 If the server runs successfully, it will respond to ssh connections that
-have a public key listed in `authorized_keys` and which have a forwarded
+have a public key or fingerprint listed in the settings yaml file and which have a forwarded
 agent. This response will be to insert an ssh user certificate into the
 forwarded agent which is signed by `caprivatekey` with the parameters
 set out in `settings.yaml` and restrictions as noted below.

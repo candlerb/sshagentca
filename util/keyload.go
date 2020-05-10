@@ -1,7 +1,9 @@
 package util
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"golang.org/x/crypto/ssh"
 	"io/ioutil"
 )
@@ -48,41 +50,23 @@ func LoadPrivateKeyRaw(filename string) (interface{}, error) {
 	return sig, nil
 }
 
-// load a public key from file
-func LoadPublicKey(filename string) (ssh.PublicKey, error) {
-
-	fkey, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-	pubKey, _, _, _, err := ssh.ParseAuthorizedKey(fkey)
-	if err != nil {
-		return nil, err
-	}
-	return pubKey, nil
-}
-
-// load authorized_keys from file
-func LoadAuthorizedKeys(filename string) (map[ssh.PublicKey]bool, error) {
+// load authorized_keys from []byte
+func LoadAuthorizedKeysBytes(authorizedKeysBytes []byte) ([]ssh.PublicKey, error) {
 
 	// record the found authorized keys
-	akeys := map[ssh.PublicKey]bool{}
+	var akeys []ssh.PublicKey
 
 	// from https://godoc.org/golang.org/x/crypto/ssh#ex-NewServerConn
-	authorizedKeysBytes, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return akeys, err
-	}
-	if len(authorizedKeysBytes) < 1 {
-		return akeys, errors.New("no content in authorized keys file")
-	}
-
 	for len(authorizedKeysBytes) > 0 {
 		pubKey, _, _, rest, err := ssh.ParseAuthorizedKey(authorizedKeysBytes)
 		if err != nil {
-			return akeys, err
+			i := bytes.IndexAny(authorizedKeysBytes, "\n")
+			if i > 1 {
+				authorizedKeysBytes = authorizedKeysBytes[0 : i-1]
+			}
+			return akeys, errors.New(fmt.Sprintf("Error parsing public key \"%s\": %s", authorizedKeysBytes, err))
 		}
-		akeys[pubKey] = true
+		akeys = append(akeys, pubKey)
 		authorizedKeysBytes = rest
 	}
 	return akeys, nil

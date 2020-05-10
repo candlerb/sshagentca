@@ -17,7 +17,7 @@ SSH Agent CA version %s
 A proof-of-concept SSH server forwarded agent certificate authority
 
     sshagentca -h
-    sshagentca -p <privatekey> -c <caprivatekey> -a <authorized_keys>
+    sshagentca -p <privatekey> -c <caprivatekey>
                -i <ipaddress> -p <port> settings.yaml
 
 Application Arguments:
@@ -27,12 +27,11 @@ Application Arguments:
 
 // flag options
 type Options struct {
-	PrivateKey     string `short:"t" long:"privateKey" required:"true" description:"server ssh private key (password protected)"`
-	CAPrivateKey   string `short:"c" long:"caPrivateKey" required:"true" description:"certificate authority private key (password protected)"`
-	AuthorizedKeys string `short:"a" long:"authorizedKeys" required:"true" description:"authorized keys file with at least one entry"`
-	IPAddress      string `short:"i" long:"ipAddress" default:"0.0.0.0" description:"ipaddress"`
-	Port           string `short:"p" long:"port" default:"2222" description:"port"`
-	Args           struct {
+	PrivateKey   string `short:"t" long:"privateKey" required:"true" description:"server ssh private key (password protected)"`
+	CAPrivateKey string `short:"c" long:"caPrivateKey" required:"true" description:"certificate authority private key (password protected)"`
+	IPAddress    string `short:"i" long:"ipAddress" default:"0.0.0.0" description:"ipaddress"`
+	Port         string `short:"p" long:"port" default:"2222" description:"port"`
+	Args         struct {
 		YamlFile string `description:"settings yaml file"`
 	} `positional-args:"yes" required:"yes"`
 }
@@ -76,8 +75,8 @@ func main() {
 		hardexit(fmt.Sprintf("CA Private key could not be loaded, %s", err))
 	}
 
-	// load settings and authorized keys
-	settings, err := util.SettingsLoad(options.Args.YamlFile, options.AuthorizedKeys)
+	// load settings
+	settings, err := util.SettingsLoad(options.Args.YamlFile)
 	if err != nil {
 		hardexit(fmt.Sprintf("Settings could not be loaded : %s", err))
 	}

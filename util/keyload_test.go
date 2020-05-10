@@ -51,11 +51,6 @@ func TestLoadRSAKeys(t *testing.T) {
 		t.Errorf("could not read private key with password: %s", err)
 	}
 
-	_, err = LoadPublicKey(pubkey)
-	if err != nil {
-		t.Errorf("could not read public key : %s", err)
-	}
-
 	// clean up
 	_ = os.Remove(tname)
 	_ = os.Remove(pubkey)
@@ -95,11 +90,6 @@ func TestLoadECDSAKeys(t *testing.T) {
 		t.Errorf("could not read private key with password: %s", err)
 	}
 
-	_, err = LoadPublicKey(pubkey)
-	if err != nil {
-		t.Errorf("could not read public key : %s", err)
-	}
-
 	// clean up
 	_ = os.Remove(tname)
 	_ = os.Remove(pubkey)
@@ -119,43 +109,36 @@ func writeToFile(content string) (*os.File, error) {
 // test empty authorized key file
 func TestAuthorizedKeysEmpty(t *testing.T) {
 	akeyfile := ``
-	af, err := writeToFile(akeyfile)
+	authorized_keys, err := LoadAuthorizedKeysBytes([]byte(akeyfile))
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = LoadAuthorizedKeys(af.Name())
-	// should error (empty authorized_keys)
-	if err == nil {
-		t.Error(af)
+	if len(authorized_keys) != 0 {
+		t.Errorf("number of authorized keys should be zero")
 	}
-	os.Remove(af.Name())
 }
 
 // test rsa authorized key in file
 func TestAuthorizedKeysOne(t *testing.T) {
 	akeyfile := `ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC2hDa5tDZ0Ji714Gpv+3Eacc1psLCcvQFvP64yaS+AQjhJ50efZwcVyP8Nb3sbcGZC7d+Q3ohGhoiPUkrCtqztDTRR/sjh/XcfDZJhOoodZnkh/3F2+ZB8x192Dm0VfddGQsbQBcLXOVYNeXcq1nne08BHANoJUqIFQ2nS4SextF4GoKPIgOEvajrk3eQf4skzcSRFcFL70Rncus/KsmvzJis7sIOIKnrZAcnBipVjGJrJPaR0jEOGrRfxNioSMzRg4piZc6lfSwOcovmDHMkDrMnKxnw9GvVOezJv0f3Z7ihoRbN43Keway7r5MkaQT4FWYgCRM7kTpN6WPuvURCn test@test.com`
-	af, err := writeToFile(akeyfile)
+	authorized_keys, err := LoadAuthorizedKeysBytes([]byte(akeyfile))
 	if err != nil {
 		t.Error(err)
 	}
-	authorized_keys, err := LoadAuthorizedKeys(af.Name())
 	if len(authorized_keys) != 1 {
 		t.Error("number of authorized keys should be one")
 	}
-	os.Remove(af.Name())
 }
 
 // test rsa and ecdsa authorized key in file
 func TestAuthorizedKeysTwo(t *testing.T) {
 	akeyfile := `ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC2hDa5tDZ0Ji714Gpv+3Eacc1psLCcvQFvP64yaS+AQjhJ50efZwcVyP8Nb3sbcGZC7d+Q3ohGhoiPUkrCtqztDTRR/sjh/XcfDZJhOoodZnkh/3F2+ZB8x192Dm0VfddGQsbQBcLXOVYNeXcq1nne08BHANoJUqIFQ2nS4SextF4GoKPIgOEvajrk3eQf4skzcSRFcFL70Rncus/KsmvzJis7sIOIKnrZAcnBipVjGJrJPaR0jEOGrRfxNioSMzRg4piZc6lfSwOcovmDHMkDrMnKxnw9GvVOezJv0f3Z7ihoRbN43Keway7r5MkaQT4FWYgCRM7kTpN6WPuvURCn test@test.com
 ecdsa-sha2-nistp384 AAAAE2VjZHNhLXNoYTItbmlzdHAzODQAAAAIbmlzdHAzODQAAABhBIfis9M22rEKQSRa6QcRn6GPmrea2mp1LKxH4VxTsfOKhGVwjDDro0xlDMD32OA9UDI8WEUuuNJavJXg7u8YIaDZou4L8QvTNNoKiEONiH22KsMO1oV92F7Mifkn7coKGg== test2@test.com`
-	af, err := writeToFile(akeyfile)
+	authorized_keys, err := LoadAuthorizedKeysBytes([]byte(akeyfile))
 	if err != nil {
 		t.Error(err)
 	}
-	authorized_keys, err := LoadAuthorizedKeys(af.Name())
 	if len(authorized_keys) != 2 {
 		t.Error("number of authorized keys should be two")
 	}
-	os.Remove(af.Name())
 }
