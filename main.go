@@ -4,6 +4,7 @@ import (
 	"fmt"
 	flags "github.com/jessevdk/go-flags"
 	"github.com/rorycl/sshagentca/util"
+	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
 	"net"
 	"os"
@@ -65,23 +66,31 @@ func main() {
 	}
 
 	// load server private key
-	fmt.Printf("\nServer private key password: ")
-	pvtPW, err := terminal.ReadPassword(0)
-	if err != nil {
-		hardexit(fmt.Sprintf("Could not read password: %s", err))
+	privateKey, err := util.LoadPrivateKey(options.PrivateKey)
+	_, passphraseNeeded := err.(*ssh.PassphraseMissingError)
+	if passphraseNeeded {
+		fmt.Printf("\nServer private key password: ")
+		pvtPW, err2 := terminal.ReadPassword(0)
+		if err2 != nil {
+			hardexit(fmt.Sprintf("Could not read password: %s", err))
+		}
+		privateKey, err = util.LoadPrivateKeyWithPassword(options.PrivateKey, pvtPW)
 	}
-	privateKey, err := util.LoadPrivateKeyWithPassword(options.PrivateKey, pvtPW)
 	if err != nil {
 		hardexit(fmt.Sprintf("Private key could not be loaded, %s", err))
 	}
 
 	// load certificate authority private key
-	fmt.Printf("\nCertificate Authority private key password: ")
-	caPW, err := terminal.ReadPassword(0)
-	if err != nil {
-		hardexit(fmt.Sprintf("Could not read password: %s", err))
+	caKey, err := util.LoadPrivateKey(options.CAPrivateKey)
+	_, passphraseNeeded = err.(*ssh.PassphraseMissingError)
+	if passphraseNeeded {
+		fmt.Printf("\nCertificate Authority private key password: ")
+		caPW, err2 := terminal.ReadPassword(0)
+		if err2 != nil {
+			hardexit(fmt.Sprintf("Could not read password: %s", err))
+		}
+		caKey, err = util.LoadPrivateKeyWithPassword(options.CAPrivateKey, caPW)
 	}
-	caKey, err := util.LoadPrivateKeyWithPassword(options.CAPrivateKey, caPW)
 	if err != nil {
 		hardexit(fmt.Sprintf("CA Private key could not be loaded, %s", err))
 	}
