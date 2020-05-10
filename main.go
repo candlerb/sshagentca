@@ -53,6 +53,17 @@ func main() {
 
 	fmt.Println("SSH Agent CA")
 
+	// load settings
+	settings, err := util.SettingsLoad(options.Args.YamlFile)
+	if err != nil {
+		hardexit(fmt.Sprintf("Settings could not be loaded : %s", err))
+	}
+
+	// check ip
+	if net.IP(options.IPAddress) == nil {
+		hardexit(fmt.Sprintf("Invalid ip address %s", options.IPAddress))
+	}
+
 	// load server private key
 	fmt.Printf("\nServer private key password: ")
 	pvtPW, err := terminal.ReadPassword(0)
@@ -73,17 +84,6 @@ func main() {
 	caKey, err := util.LoadPrivateKeyWithPassword(options.CAPrivateKey, caPW)
 	if err != nil {
 		hardexit(fmt.Sprintf("CA Private key could not be loaded, %s", err))
-	}
-
-	// load settings
-	settings, err := util.SettingsLoad(options.Args.YamlFile)
-	if err != nil {
-		hardexit(fmt.Sprintf("Settings could not be loaded : %s", err))
-	}
-
-	// check ip
-	if net.IP(options.IPAddress) == nil {
-		hardexit(fmt.Sprintf("Invalid ip address %s", options.IPAddress))
 	}
 
 	Serve(options, privateKey, caKey, settings)
