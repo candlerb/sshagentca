@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"golang.org/x/crypto/ssh"
 	yaml "gopkg.in/yaml.v3"
-	"io/ioutil"
+	"os"
 	"time"
 )
 
@@ -44,15 +44,17 @@ type Settings struct {
 
 // Load a settings yaml file into a Settings struct
 func SettingsLoad(yamlFilePath string) (Settings, error) {
-
 	var s = Settings{}
 
-	filer, err := ioutil.ReadFile(yamlFilePath)
+	file, err := os.Open(yamlFilePath)
 	if err != nil {
 		return s, err
 	}
+	defer file.Close()
 
-	err = yaml.Unmarshal(filer, &s)
+	dec := yaml.NewDecoder(file)
+	dec.KnownFields(true)
+	err = dec.Decode(&s)
 	if err != nil {
 		return s, err
 	}
