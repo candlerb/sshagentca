@@ -70,6 +70,7 @@ func Serve(options Options, privateKey ssh.Signer, caKey ssh.Signer, settings ut
 		user, err := settings.UserByFingerprint(sshConn.Permissions.Extensions["pubkey-fp"])
 		if err != nil {
 			log.Printf("verification error from unknown user %s", sshConn.Permissions.Extensions["pubkey-fp"])
+			sshConn.Close()
 			continue
 		}
 
