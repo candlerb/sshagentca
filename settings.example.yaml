@@ -26,6 +26,14 @@ extensions:
     # permit-X11-forwarding: ""
     # permit-user-rc: ""
 
+# Authentication using OpenID Connect.  For Google you should create
+# the OAuth client as "Desktop app" so that the default redirect URL
+# of "urn:ietf:wg:oauth:2.0:oob" works
+#oidc:
+#    issuer: https://accounts.google.com
+#    client_id: XXXXXXXX
+#    client_secret: XXXXXXXX
+
 # user_principals, a list of configuration blocks by user, with name,
 # ssh public key and/or fingerprint and the principals to be inserted in
 # the certificate.  If both authorized_key and fingerprint are present
@@ -53,4 +61,9 @@ user_principals:
             - web
             - database
     
-
+#    -
+#        name: mary
+#        oidc_subject: 1234567890987654321
+#        principals:
+#            - web
+#            - database

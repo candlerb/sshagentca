@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/candlerb/sshagentca/util"
 	"golang.org/x/crypto/ssh"
@@ -23,6 +24,7 @@ import (
 // blog posting at
 // https://scalingo.com/blog/writing-a-replacement-to-openssh-using-go-22.html
 func Serve(options Options, privateKey ssh.Signer, caKey ssh.Signer, settings util.Settings) {
+	ctx := context.Background()
 
 	// configure server
 	sshConfig := &ssh.ServerConfig{
@@ -36,7 +38,40 @@ func Serve(options Options, privateKey ssh.Signer, caKey ssh.Signer, settings ut
 					},
 				}, nil
 			}
-			return nil, fmt.Errorf("unknown public key for %q", c.User())
+			return nil, fmt.Errorf("unknown public key %s for %q", ssh.FingerprintSHA256(pubKey), c.User())
+		},
+		KeyboardInteractiveCallback: func(c ssh.ConnMetadata, client ssh.KeyboardInteractiveChallenge) (*ssh.Permissions, error) {
+			if settings.OpenIDC == nil {
+				return nil, fmt.Errorf("OpenIDC not configured")
+			}
+			instruction := "Visit this URL to obtain auth code:\n" + settings.OpenIDC.AuthCodeURL("") + "\n"
+			answers, err := client(c.User(), instruction, []string{"Enter your auth code: "}, []bool{true})
+			if err != nil {
+				return nil, err
+			}
+			if len(answers) != 1 {
+				return nil, fmt.Errorf("Unexpected number of answers: %d", len(answers))
+			}
+			idToken, err := settings.OpenIDC.CodeToIDToken(ctx, answers[0])
+			if err != nil {
+				return nil, err
+			}
+			_, err = settings.UserByOIDCSubject(idToken.Subject)
+			if err != nil {
+				// User authenticated successfully but we don't know them.
+				// Let them know their Subject anyway
+				msg := fmt.Sprintf("Not authorized for this service: %v", idToken.Subject)
+				_, err := client(c.User(), msg, []string{}, []bool{})
+				if err != nil {
+					return nil, err
+				}
+				return nil, fmt.Errorf("unknown oidc subject %s for %q", idToken.Subject, c.User())
+			}
+			return &ssh.Permissions{
+				Extensions: map[string]string{
+					"oidc-sub": idToken.Subject,
+				},
+			}, nil
 		},
 	}
 	sshConfig.AddHostKey(privateKey)
@@ -67,16 +102,20 @@ func Serve(options Options, privateKey ssh.Signer, caKey ssh.Signer, settings ut
 		}
 
 		// extract user
+		// TODO: if both public key and OIDC configured for same user, enforce both
 		user, err := settings.UserByFingerprint(sshConn.Permissions.Extensions["pubkey-fp"])
 		if err != nil {
-			log.Printf("verification error from unknown user %s", sshConn.Permissions.Extensions["pubkey-fp"])
+			user, err = settings.UserByOIDCSubject(sshConn.Permissions.Extensions["oidc-sub"])
+		}
+		if err != nil {
+			log.Printf("verification error from unknown user %v", sshConn.Permissions.Extensions)
 			sshConn.Close()
 			continue
 		}
 
 		// report remote address, user and key
 		log.Printf("new ssh connection from %s (%s)", sshConn.RemoteAddr(), sshConn.ClientVersion())
-		log.Printf("user %s logged in with key %s", user.Name, user.Fingerprint)
+		log.Printf("user %s logged in with %v", user.Name, sshConn.Permissions.Extensions)
 
 		// https://lists.gt.net/openssh/dev/72190
 		agentChan, reqs, err := sshConn.OpenChannel("auth-agent@openssh.com", nil)

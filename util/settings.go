@@ -1,6 +1,7 @@
 package util
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"golang.org/x/crypto/ssh"
@@ -30,6 +31,7 @@ type UserPrincipals struct {
 	// ssh.FingerprintSHA256
 	Fingerprint   string   `yaml:"fingerprint"`
 	AuthorizedKey string   `yaml:"authorized_key"`
+	OIDCSubject   string   `yaml:"oidc_subject"`
 	Principals    []string `yaml:"principals,flow"`
 }
 
@@ -39,7 +41,9 @@ type Settings struct {
 	Banner             string            `yaml:"banner"`
 	Extensions         map[string]string `yaml:"extensions,flow"`
 	Users              []*UserPrincipals `yaml:"user_principals"`
+	OpenIDC            *OpenIDC          `yaml:"oidc"`
 	usersByFingerprint map[string]*UserPrincipals
+	usersByOIDCSubject map[string]*UserPrincipals
 }
 
 // Load a settings yaml file into a Settings struct
@@ -75,6 +79,22 @@ func SettingsLoad(yamlFilePath string) (Settings, error) {
 		return s, err
 	}
 
+	// build map of keys by subject
+	err = s.buildSubMap()
+	if err != nil {
+		return s, err
+	}
+
+	// prepare OpenID
+	if s.OpenIDC != nil {
+		err = s.OpenIDC.Init(context.Background())
+		if err != nil {
+			return s, err
+		}
+	} else if len(s.usersByOIDCSubject) > 0 {
+		return s, errors.New("oidc provider not configured in yaml file")
+	}
+
 	return s, nil
 }
 
@@ -84,6 +104,16 @@ func (s *Settings) UserByFingerprint(fp string) (*UserPrincipals, error) {
 	up, ok := s.usersByFingerprint[fp]
 	if !ok {
 		return up, errors.New(fmt.Sprintf("user for fingerprint %s not found", fp))
+	}
+	return up, nil
+}
+
+// Extract a user's UserPrincipals struct by OIDC Subject
+func (s *Settings) UserByOIDCSubject(sub string) (*UserPrincipals, error) {
+	var up = &UserPrincipals{}
+	up, ok := s.usersByOIDCSubject[sub]
+	if !ok {
+		return up, errors.New(fmt.Sprintf("user for subject %s not found", sub))
 	}
 	return up, nil
 }
@@ -99,6 +129,21 @@ func (s *Settings) buildFPMap() error {
 			return errors.New(fmt.Sprintf("duplicate entry for key %s (users %s and %s)", u.Fingerprint, u0.Name, u.Name))
 		}
 		s.usersByFingerprint[u.Fingerprint] = u
+	}
+	return nil
+}
+
+// build map by subject
+func (s *Settings) buildSubMap() error {
+	s.usersByOIDCSubject = map[string]*UserPrincipals{}
+	for _, u := range s.Users {
+		if u.OIDCSubject == "" {
+			continue
+		}
+		if u0, ok := s.usersByOIDCSubject[u.OIDCSubject]; ok {
+			return errors.New(fmt.Sprintf("duplicate entry for subject %s (users %s and %s)", u.OIDCSubject, u0.Name, u.Name))
+		}
+		s.usersByOIDCSubject[u.OIDCSubject] = u
 	}
 	return nil
 }
