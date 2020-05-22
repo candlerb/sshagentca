@@ -165,47 +165,60 @@ func handleChannels(chans <-chan ssh.NewChannel, user *util.UserPrincipals,
 	for thisChan := range chans {
 		if thisChan.ChannelType() != "session" {
 			thisChan.Reject(ssh.Prohibited, "channel type is not a session")
-			return
+			continue
 		}
 
 		// accept channel
 		ch, reqs, err := thisChan.Accept()
-		defer ch.Close()
 		if err != nil {
 			log.Println("did not accept channel request", err)
+			continue
+		}
+
+		for req := range reqs {
+			// only respond to ssh agent forwarding type requests
+			if req.Type != "auth-agent-req@openssh.com" {
+				if req.WantReply {
+					err = req.Reply(false, []byte("request type not supported"))
+					if err != nil {
+						log.Println("unable to send reply to unknown request", err)
+					}
+				}
+				continue
+			}
+			if req.WantReply {
+				err = req.Reply(true, []byte{})
+				if err != nil {
+					log.Println("unable to send reply to forwarding request", err)
+					continue
+				}
+			}
+
+			// terminal
+			term := terminal.NewTerminal(ch, "")
+			termWriter(term, settings.Banner)
+			termWriter(term, fmt.Sprintf("welcome, %s", user.Name))
+
+			// add certificate to agent, let the user know, then close the
+			// connection
+			err = addCertToAgent(agentConn, caKey, user, settings)
+			if err != nil {
+				log.Printf("certificate creation error %s\n", err)
+				termWriter(term, "certificate creation error")
+				termWriter(term, "goodbye\n")
+				chanCloser(ch, true)
+			} else {
+				log.Printf("certificate creation and insertion in agent done\n")
+				termWriter(term, "certificate generation complete")
+				termWriter(term, "run 'ssh-add -l' to view")
+				termWriter(term, "goodbye\n")
+				chanCloser(ch, false)
+			}
+			time.Sleep(250 * time.Millisecond)
+			log.Println("closing the connection")
+			ch.Close()
 			return
 		}
-
-		// only respond to ssh agent forwarding type requests
-		req := <-reqs
-		if req.Type != "auth-agent-req@openssh.com" {
-			ch.Write([]byte("request type not supported\n"))
-			return
-		}
-
-		// terminal
-		term := terminal.NewTerminal(ch, "")
-		termWriter(term, settings.Banner)
-		termWriter(term, fmt.Sprintf("welcome, %s", user.Name))
-
-		// add certificate to agent, let the user know, then close the
-		// connection
-		err = addCertToAgent(agentConn, caKey, user, settings)
-		if err != nil {
-			log.Printf("certificate creation error %s\n", err)
-			termWriter(term, "certificate creation error")
-			termWriter(term, "goodbye\n")
-			chanCloser(ch, true)
-		} else {
-			log.Printf("certificate creation and insertion in agent done\n")
-			termWriter(term, "certificate generation complete")
-			termWriter(term, "run 'ssh-add -l' to view")
-			termWriter(term, "goodbye\n")
-			chanCloser(ch, false)
-		}
-		time.Sleep(250 * time.Millisecond)
-		log.Println("closing the connection")
-		sshConn.Close()
-		return
+		ch.Close()
 	}
 }
