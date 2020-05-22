@@ -5,6 +5,8 @@ import (
 	"fmt"
 	oidc "github.com/coreos/go-oidc"
 	"golang.org/x/oauth2"
+	"regexp"
+	"strings"
 )
 
 type OpenIDC struct {
@@ -14,9 +16,10 @@ type OpenIDC struct {
 	RedirectURL  string   `yaml:"redirect_url"`
 	Scopes       []string `yaml:"scopes"`
 
-	oauth2   *oauth2.Config
-	provider *oidc.Provider
-	verifier *oidc.IDTokenVerifier
+	oauth2           *oauth2.Config
+	provider         *oidc.Provider
+	verifier         *oidc.IDTokenVerifier
+	validRedirectURI *regexp.Regexp
 }
 
 // Initialise - makes an outbound connection to fetch the provider
@@ -40,6 +43,7 @@ func (app *OpenIDC) Init(ctx context.Context) error {
 		app.Scopes = []string{oidc.ScopeOpenID}
 	}
 
+	app.validRedirectURI = regexp.MustCompile(`\Ahttp://(localhost|127[.]0[.]0[.]1):\d+/\S*\z`)
 	app.provider, err = oidc.NewProvider(ctx, app.Issuer)
 	if err != nil {
 		return err
@@ -58,8 +62,17 @@ func (app *OpenIDC) Init(ctx context.Context) error {
 }
 
 func (app *OpenIDC) CodeToIDToken(ctx context.Context, code string) (*oidc.IDToken, error) {
+	// Special case: allow user to enter <code><space><URI> so that they can
+	// select their own localhost port
+	opt := make([]oauth2.AuthCodeOption, 0)
+	pieces := strings.Split(code, " ")
+	if len(pieces) == 2 && app.validRedirectURI.MatchString(pieces[1]) {
+		code = pieces[0]
+		opt = append(opt, oauth2.SetAuthURLParam("redirect_uri", pieces[1]))
+	}
+
 	// Call out to exchange code for token
-	oauth2Token, err := app.oauth2.Exchange(ctx, code)
+	oauth2Token, err := app.oauth2.Exchange(ctx, code, opt...)
 	if err != nil {
 		return nil, err
 	}
