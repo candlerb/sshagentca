@@ -1,9 +1,2 @@
-# sshagentca gitignore
-.DS_Store
-*.swp
-*.swo
-ex/*
-tags
-main
-sshagentca
-
+# sshtokenca gitignore
+sshtokenca

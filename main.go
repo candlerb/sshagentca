@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/candlerb/sshagentca/util"
+	"github.com/candlerb/sshtokenca/util"
 	flags "github.com/jessevdk/go-flags"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
@@ -17,8 +17,8 @@ SSH Agent CA version %s
 
 A proof-of-concept SSH server forwarded agent certificate authority
 
-    sshagentca -h
-    sshagentca -p <privatekey> -c <caprivatekey>
+    sshtokenca -h
+    sshtokenca -p <privatekey> -c <caprivatekey>
                -i <ipaddress> -p <port> settings.yaml
 
 Application Arguments:

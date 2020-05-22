@@ -1,4 +1,4 @@
-# sshagentca example settings file
+# sshtokenca example settings file
 
 # certificate validity. periods of more than 24 hours are
 # not permitted by this implementation. certificates with the 'forever'
