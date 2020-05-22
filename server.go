@@ -176,7 +176,7 @@ func handleChannels(chans <-chan ssh.NewChannel, user *util.UserPrincipals,
 			return
 		}
 
-		// only respond to "exec" type requests
+		// only respond to ssh agent forwarding type requests
 		req := <-reqs
 		if req.Type != "auth-agent-req@openssh.com" {
 			ch.Write([]byte("request type not supported\n"))
