@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/candlerb/sshtokenca/util"
@@ -30,15 +31,16 @@ func Serve(options Options, privateKey ssh.Signer, caKey ssh.Signer, settings ut
 	sshConfig := &ssh.ServerConfig{
 		// public key callback taken directly from ssh.ServerConn example
 		PublicKeyCallback: func(c ssh.ConnMetadata, pubKey ssh.PublicKey) (*ssh.Permissions, error) {
-			_, err := settings.UserByFingerprint(ssh.FingerprintSHA256(pubKey))
-			if err == nil {
-				return &ssh.Permissions{
-					Extensions: map[string]string{
-						"pubkey-fp": ssh.FingerprintSHA256(pubKey),
-					},
-				}, nil
+			u, err := settings.UserByName(c.User())
+			if err != nil {
+				return nil, err
 			}
-			return nil, fmt.Errorf("unknown public key %s for %q", ssh.FingerprintSHA256(pubKey), c.User())
+			for _, key := range u.PublicKeys() {
+				if bytes.Equal(pubKey.Marshal(), key.Marshal()) {
+					return nil, nil
+				}
+			}
+			return nil, fmt.Errorf("unknown public key")
 		},
 		KeyboardInteractiveCallback: func(c ssh.ConnMetadata, client ssh.KeyboardInteractiveChallenge) (*ssh.Permissions, error) {
 			if settings.OpenIDC == nil {
@@ -56,8 +58,11 @@ func Serve(options Options, privateKey ssh.Signer, caKey ssh.Signer, settings ut
 			if err != nil {
 				return nil, err
 			}
-			_, err = settings.UserByOIDCSubject(idToken.Subject)
+			u, err := settings.UserByName(c.User())
 			if err != nil {
+				return nil, err
+			}
+			if idToken.Subject != u.OIDCSubject {
 				// User authenticated successfully but we don't know them.
 				// Let them know their Subject anyway
 				msg := fmt.Sprintf("Not authorized for this service: %v", idToken.Subject)
@@ -67,11 +72,7 @@ func Serve(options Options, privateKey ssh.Signer, caKey ssh.Signer, settings ut
 				}
 				return nil, fmt.Errorf("unknown oidc subject %s for %q", idToken.Subject, c.User())
 			}
-			return &ssh.Permissions{
-				Extensions: map[string]string{
-					"oidc-sub": idToken.Subject,
-				},
-			}, nil
+			return nil, nil
 		},
 	}
 	sshConfig.AddHostKey(privateKey)
@@ -102,20 +103,15 @@ func Serve(options Options, privateKey ssh.Signer, caKey ssh.Signer, settings ut
 		}
 
 		// extract user
-		// TODO: if both public key and OIDC configured for same user, enforce both
-		user, err := settings.UserByFingerprint(sshConn.Permissions.Extensions["pubkey-fp"])
+		user, err := settings.UserByName(sshConn.User())
 		if err != nil {
-			user, err = settings.UserByOIDCSubject(sshConn.Permissions.Extensions["oidc-sub"])
-		}
-		if err != nil {
-			log.Printf("verification error from unknown user %v", sshConn.Permissions.Extensions)
+			log.Printf("INTERNAL ERROR: unable to find user %s", sshConn.User())
 			sshConn.Close()
 			continue
 		}
 
 		// report remote address, user and key
-		log.Printf("new ssh connection from %s (%s)", sshConn.RemoteAddr(), sshConn.ClientVersion())
-		log.Printf("user %s logged in with %v", user.Name, sshConn.Permissions.Extensions)
+		log.Printf("new ssh connection for user %s from %s (%s)", user.Name, sshConn.RemoteAddr(), sshConn.ClientVersion())
 
 		// https://lists.gt.net/openssh/dev/72190
 		agentChan, reqs, err := sshConn.OpenChannel("auth-agent@openssh.com", nil)

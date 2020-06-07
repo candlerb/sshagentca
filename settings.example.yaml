@@ -35,11 +35,11 @@ extensions:
 #    client_secret: XXXXXXXX
 
 # user_principals, a list of configuration blocks by user, with name,
-# ssh public key and/or fingerprint and the principals to be inserted in
-# the certificate.  If both authorized_key and fingerprint are present
-# they must match.  This structure can also
-# be used to allow someone to have two key registrations to receive
-# different principal assignments Note that zero-length principals are
+# ssh public key and/or OIDC subject and the principals to be inserted in
+# the certificate.  If fingerprint is present then it must match the
+# authorized_key.  This structure can also
+# be used to allow someone to use the same key to receive
+# different principal assignments.  Note that zero-length principals are
 # valid for *any* username (and are therefore not supported).
 # Fingerprints are ssh key sha256 hashes fingerprints which can be
 # listed by ssh-keygen -l -f <filename> on recent versions of

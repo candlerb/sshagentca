@@ -2,7 +2,7 @@
 
 # sshtokenca
 
-version 0.0.5 : 22 May 2020
+version 0.0.6 : 7 June 2020
 
 A proof-of-concept project to add ssh user certificates to forwarded ssh
 agents using go's ssh packages.
@@ -23,11 +23,11 @@ Example client usage:
     ssh-add ~/.ssh/id_test
     <enter password>
 
-    # assuming the public key or fingerprint to id_test is in the
+    # assuming the public key to id_test is in the
     # settings.yaml file on the sshtokenca server, along with the
     # certificate name and principals, and sshtokenca is running on
     # 10.0.1.99: (it is important to forward the agent)
-    ssh -p 2222 10.0.1.99 -A
+    ssh -p 2222 bob@10.0.1.99 -A
 
     > acmecorp ssh user certificate service
     > 
@@ -42,7 +42,7 @@ Example client usage:
     ssh userthatcansudo@remoteserver -A
 
 The login username that the client provides when connecting to `sshtokenca`
-is ignored - it does not have to match the `name:` in `settings.yaml`.
+must match the `name:` in `settings.yaml`.
 
 Certificates from `sshtokenca` can be conveniently used with
 [pam-ussh](https://github.com/uber/pam-ussh) to control sudo privileges
@@ -67,8 +67,9 @@ private key, with password protected private keys. The server will
 prompt for passwords on startup.
 
 Each user requires `name and `user_principals` settings in
-the settings yaml file, and either `authorized_key` or `fingerprint`.
-If both are supplied, they must match.
+the settings yaml file, and either `authorized_key` or `oidc_subject`.
+It is possible to provide `fingerprint` as well, in which case, it must
+match with the `authorized_key`.
 
 The server will run on the specified IP address and port, by default
 0.0.0.0:2222.

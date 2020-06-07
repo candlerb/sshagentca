@@ -27,23 +27,23 @@ var permittedExtensions = map[string]string{
 }
 
 type UserPrincipals struct {
-	Name string `yaml:"name"`
-	// ssh.FingerprintSHA256
-	Fingerprint   string   `yaml:"fingerprint"`
+	Name          string   `yaml:"name"`
 	AuthorizedKey string   `yaml:"authorized_key"`
+	Fingerprint   string   `yaml:"fingerprint"`
 	OIDCSubject   string   `yaml:"oidc_subject"`
 	Principals    []string `yaml:"principals,flow"`
+
+	publicKeys []ssh.PublicKey
 }
 
 type Settings struct {
-	Validity           time.Duration     `yaml:"validity"`
-	Organisation       string            `yaml:"organisation"`
-	Banner             string            `yaml:"banner"`
-	Extensions         map[string]string `yaml:"extensions,flow"`
-	Users              []*UserPrincipals `yaml:"user_principals"`
-	OpenIDC            *OpenIDC          `yaml:"oidc"`
-	usersByFingerprint map[string]*UserPrincipals
-	usersByOIDCSubject map[string]*UserPrincipals
+	Validity     time.Duration     `yaml:"validity"`
+	Organisation string            `yaml:"organisation"`
+	Banner       string            `yaml:"banner"`
+	Extensions   map[string]string `yaml:"extensions,flow"`
+	Users        []*UserPrincipals `yaml:"user_principals"`
+	OpenIDC      *OpenIDC          `yaml:"oidc"`
+	usersByName  map[string]*UserPrincipals
 }
 
 // Load a settings yaml file into a Settings struct
@@ -73,14 +73,8 @@ func SettingsLoad(yamlFilePath string) (Settings, error) {
 		return s, err
 	}
 
-	// build map of keys by fingerprint
-	err = s.buildFPMap()
-	if err != nil {
-		return s, err
-	}
-
-	// build map of keys by subject
-	err = s.buildSubMap()
+	// build map of keys by name
+	err = s.buildNameMap()
 	if err != nil {
 		return s, err
 	}
@@ -91,91 +85,63 @@ func SettingsLoad(yamlFilePath string) (Settings, error) {
 		if err != nil {
 			return s, err
 		}
-	} else if len(s.usersByOIDCSubject) > 0 {
-		return s, errors.New("oidc provider not configured in yaml file")
 	}
 
 	return s, nil
 }
 
-// Extract a user's UserPrincipals struct by fingerprint
-func (s *Settings) UserByFingerprint(fp string) (*UserPrincipals, error) {
+// Extract a user's UserPrincipals struct
+func (s *Settings) UserByName(name string) (*UserPrincipals, error) {
 	var up = &UserPrincipals{}
-	up, ok := s.usersByFingerprint[fp]
+	up, ok := s.usersByName[name]
 	if !ok {
-		return up, errors.New(fmt.Sprintf("user for fingerprint %s not found", fp))
+		return up, fmt.Errorf("user %s not found", name)
 	}
 	return up, nil
 }
 
-// Extract a user's UserPrincipals struct by OIDC Subject
-func (s *Settings) UserByOIDCSubject(sub string) (*UserPrincipals, error) {
-	var up = &UserPrincipals{}
-	up, ok := s.usersByOIDCSubject[sub]
-	if !ok {
-		return up, errors.New(fmt.Sprintf("user for subject %s not found", sub))
-	}
-	return up, nil
-}
-
-// build map by fingerprint
-func (s *Settings) buildFPMap() error {
-	s.usersByFingerprint = map[string]*UserPrincipals{}
+// build map by name
+func (s *Settings) buildNameMap() error {
+	s.usersByName = map[string]*UserPrincipals{}
 	for _, u := range s.Users {
-		if u.Fingerprint == "" {
-			continue
+		if _, ok := s.usersByName[u.Name]; ok {
+			return fmt.Errorf("duplicate entry for user %s", u.Name)
 		}
-		if u0, ok := s.usersByFingerprint[u.Fingerprint]; ok {
-			return errors.New(fmt.Sprintf("duplicate entry for key %s (users %s and %s)", u.Fingerprint, u0.Name, u.Name))
-		}
-		s.usersByFingerprint[u.Fingerprint] = u
-	}
-	return nil
-}
-
-// build map by subject
-func (s *Settings) buildSubMap() error {
-	s.usersByOIDCSubject = map[string]*UserPrincipals{}
-	for _, u := range s.Users {
-		if u.OIDCSubject == "" {
-			continue
-		}
-		if u0, ok := s.usersByOIDCSubject[u.OIDCSubject]; ok {
-			return errors.New(fmt.Sprintf("duplicate entry for subject %s (users %s and %s)", u.OIDCSubject, u0.Name, u.Name))
-		}
-		s.usersByOIDCSubject[u.OIDCSubject] = u
+		s.usersByName[u.Name] = u
 	}
 	return nil
 }
 
 // Validate the certificate extensions, validity period and user records
-// Generate fingerprint from authorized_key if required
 func (s *Settings) validate() error {
 
 	// check validity period
 	if s.Validity < minvalidity {
-		return errors.New(fmt.Sprintf("validity must be >=%s", minvalidity))
+		return fmt.Errorf("validity is below minimum validity")
 	} else if s.Validity > maxvalidity {
-		return errors.New(fmt.Sprintf("validity must be <=%s", maxvalidity))
+		return fmt.Errorf("validity is above maximum validity")
 	}
 
 	// check extensions meet permittedExtensions
 	for k, v := range s.Extensions {
 		val, ok := permittedExtensions[k]
 		if !ok {
-			return errors.New(fmt.Sprintf("extension %s not permitted", k))
+			return fmt.Errorf("extension %s not permitted", k)
 		}
 		if v != val {
-			return errors.New(fmt.Sprintf("value '%s' for key %s not permitted, expected %s", val, k, v))
+			return fmt.Errorf("value '%s' for key %s not permitted, expected %s", val, k, v)
 		}
 	}
 
 	// check users
+	foundOIDC := false
 	for _, v := range s.Users {
 		if v.Name == "" {
 			return errors.New("user provided with empty name")
 		} else if len(v.Principals) == 0 {
-			return errors.New(fmt.Sprintf("user %s provided with no principals", v.Name))
+			return fmt.Errorf("user %s provided with no principals", v.Name)
+		} else if v.AuthorizedKey == "" && v.OIDCSubject == "" {
+			return fmt.Errorf("user %s has no authorized_key or oidc_subject", v.Name)
 		}
 
 		if v.AuthorizedKey != "" {
@@ -184,22 +150,31 @@ func (s *Settings) validate() error {
 				return err
 			}
 			if len(keys) != 1 {
-				return errors.New(fmt.Sprintf("user %s unexpected number of keys in authorized_keys entry (%d)", v.Name, len(keys)))
+				return fmt.Errorf("user %s unexpected number of keys in authorized_key entry (%d)", v.Name, len(keys))
 			}
-			fp := string(ssh.FingerprintSHA256(keys[0]))
-			if v.Fingerprint != "" && v.Fingerprint != fp {
-				return errors.New(fmt.Sprintf("user %s mismatched fingerprint and authorized_key", v.Name))
+			if v.Fingerprint != "" {
+				fp := string(ssh.FingerprintSHA256(keys[0]))
+				if v.Fingerprint != fp {
+					return fmt.Errorf("user %s mismatched fingerprint and public key", v.Name)
+				}
 			}
-			v.Fingerprint = fp
-		} else if v.Fingerprint == "" {
-			return errors.New(fmt.Sprintf("user %s fingerprint and authorized_key missing", v.Name))
-		} else if len(v.Fingerprint) != 50 {
-			return errors.New(fmt.Sprintf("user %s fingerprint unexpected length", v.Name))
-		} else if v.Fingerprint[:7] != "SHA256:" {
-			return errors.New(fmt.Sprintf("user %s fingerprint does not start with SHA256:", v.Name))
+			v.publicKeys = keys
+		} else if v.Fingerprint != "" {
+			return fmt.Errorf("user %s has fingerprint but no authorized_key", v.Name)
+		}
+
+		if v.OIDCSubject != "" {
+			foundOIDC = true
 		}
 	}
 
-	return nil
+	if foundOIDC && s.OpenIDC == nil {
+		return errors.New("oidc authorization used but oidc provider not configured")
+	}
 
+	return nil
+}
+
+func (up *UserPrincipals) PublicKeys() []ssh.PublicKey {
+	return up.publicKeys
 }

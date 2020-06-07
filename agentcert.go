@@ -59,6 +59,6 @@ func addCertToAgent(agentC agent.ExtendedAgent, caKey ssh.Signer, user *util.Use
 		return fmt.Errorf("cert signing error: %s", err)
 	}
 
-	log.Printf("completed making certificate for %s (fp %s) principals %s expiring %s", user.Name, user.Fingerprint, user.Principals, toT.Format(fmtT))
+	log.Printf("completed making certificate for %s principals %s expiring %s", user.Name, user.Principals, toT.Format(fmtT))
 	return nil
 }

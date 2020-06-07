@@ -2,7 +2,6 @@ package util
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"golang.org/x/crypto/ssh"
 	"io/ioutil"
@@ -64,7 +63,7 @@ func LoadAuthorizedKeysBytes(authorizedKeysBytes []byte) ([]ssh.PublicKey, error
 			if i > 1 {
 				authorizedKeysBytes = authorizedKeysBytes[0 : i-1]
 			}
-			return akeys, errors.New(fmt.Sprintf("Error parsing public key \"%s\": %s", authorizedKeysBytes, err))
+			return akeys, fmt.Errorf("Error parsing public key \"%s\": %s", authorizedKeysBytes, err)
 		}
 		akeys = append(akeys, pubKey)
 		authorizedKeysBytes = rest
