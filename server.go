@@ -101,6 +101,10 @@ func Serve(options Options, privateKey ssh.Signer, caKey ssh.Signer, settings ut
 			log.Printf("failed to handshake (%s)", err)
 			continue
 		}
+		go ssh.DiscardRequests(reqs)
+
+		// report remote address, user and key
+		log.Printf("new ssh connection for user %s from %s (%s)", sshConn.User(), sshConn.RemoteAddr(), sshConn.ClientVersion())
 
 		// extract user
 		user, err := settings.UserByName(sshConn.User())
@@ -110,24 +114,32 @@ func Serve(options Options, privateKey ssh.Signer, caKey ssh.Signer, settings ut
 			continue
 		}
 
-		// report remote address, user and key
-		log.Printf("new ssh connection for user %s from %s (%s)", user.Name, sshConn.RemoteAddr(), sshConn.ClientVersion())
-
-		// https://lists.gt.net/openssh/dev/72190
-		agentChan, reqs, err := sshConn.OpenChannel("auth-agent@openssh.com", nil)
-		if err != nil {
-			log.Printf("Could not open agent channel %s", err)
-			sshConn.Close()
-			continue
-		}
-		agentConn := agent.NewClient(agentChan)
-
-		// discard incoming out-of-band requests
-		go ssh.DiscardRequests(reqs)
+		message, err := addCertificate(user, settings, sshConn, caKey)
 
 		// accept all channels
-		go handleChannels(chans, user, settings, sshConn, agentConn, caKey)
+		go handleChannels(chans, user, settings, sshConn, message, err)
 	}
+}
+
+func addCertificate(user *util.UserPrincipals, settings util.Settings,
+	sshConn *ssh.ServerConn, caKey ssh.Signer) (string, error) {
+	// https://lists.gt.net/openssh/dev/72190
+	agentChan, reqs, err := sshConn.OpenChannel("auth-agent@openssh.com", nil)
+	if err != nil {
+		return "Could not open agent channel. Connect using agent forwarding (ssh -A)", err
+	}
+	defer agentChan.Close()
+	go ssh.DiscardRequests(reqs)
+
+	agentConn := agent.NewClient(agentChan)
+
+	err = addCertToAgent(agentConn, caKey, user, settings)
+	if err != nil {
+		log.Printf("certificate creation error %s\n", err)
+		return "Certification creation error", err
+	}
+
+	return "Certification generation complete. Run 'ssh-add -l' to view", nil
 }
 
 // write to the connection terminal, ignoring errors
@@ -144,77 +156,75 @@ func chanCloser(c ssh.Channel, isError bool) {
 		status.Status = 1
 	}
 	// https://godoc.org/golang.org/x/crypto/ssh#Channel
+	// https://tools.ietf.org/html/rfc4254#section-6.10
 	_, err := c.SendRequest("exit-status", false, ssh.Marshal(status))
 	if err != nil {
 		log.Printf("Could not close ssh client connection: %s", err)
 	}
+	c.Close()
 }
 
 // Service the incoming channel. The certErr channel indicates when the
 // certificate has finished generation
 func handleChannels(chans <-chan ssh.NewChannel, user *util.UserPrincipals,
-	settings util.Settings, sshConn *ssh.ServerConn, agentConn agent.ExtendedAgent,
-	caKey ssh.Signer) {
+	settings util.Settings, sshConn *ssh.ServerConn, message string, result error) {
 
 	defer sshConn.Close()
+	limit := time.After(10 * time.Second)
 
-	for thisChan := range chans {
+	// Only accept a *single* channel request
+	select {
+	case thisChan := <-chans:
+		if thisChan == nil {
+			return
+		}
+
 		if thisChan.ChannelType() != "session" {
 			thisChan.Reject(ssh.Prohibited, "channel type is not a session")
-			continue
+			return
 		}
 
 		// accept channel
 		ch, reqs, err := thisChan.Accept()
 		if err != nil {
 			log.Println("did not accept channel request", err)
-			continue
-		}
-
-		for req := range reqs {
-			// only respond to ssh agent forwarding type requests
-			if req.Type != "auth-agent-req@openssh.com" {
-				if req.WantReply {
-					err = req.Reply(false, []byte("request type not supported"))
-					if err != nil {
-						log.Println("unable to send reply to unknown request", err)
-					}
-				}
-				continue
-			}
-			if req.WantReply {
-				err = req.Reply(true, []byte{})
-				if err != nil {
-					log.Println("unable to send reply to forwarding request", err)
-					continue
-				}
-			}
-
-			// terminal
-			term := terminal.NewTerminal(ch, "")
-			termWriter(term, settings.Banner)
-			termWriter(term, fmt.Sprintf("welcome, %s", user.Name))
-
-			// add certificate to agent, let the user know, then close the
-			// connection
-			err = addCertToAgent(agentConn, caKey, user, settings)
-			if err != nil {
-				log.Printf("certificate creation error %s\n", err)
-				termWriter(term, "certificate creation error")
-				termWriter(term, "goodbye\n")
-				chanCloser(ch, true)
-			} else {
-				log.Printf("certificate creation and insertion in agent done\n")
-				termWriter(term, "certificate generation complete")
-				termWriter(term, "run 'ssh-add -l' to view")
-				termWriter(term, "goodbye\n")
-				chanCloser(ch, false)
-			}
-			time.Sleep(250 * time.Millisecond)
-			log.Println("closing the connection")
-			ch.Close()
 			return
 		}
-		ch.Close()
+
+		// wait for a "shell" request to return the result text
+		for {
+			select {
+			case req := <-reqs:
+				if req == nil {
+					return
+				}
+				log.Printf("Received request: %s\n", req.Type)
+				ok := (req.Type == "auth-agent-req@openssh.com") ||
+					(req.Type == "pty-req") ||
+					(req.Type == "shell")
+				if req.WantReply {
+					req.Reply(ok, nil)
+				}
+				if req.Type == "shell" {
+					// terminal
+					term := terminal.NewTerminal(ch, "")
+					termWriter(term, settings.Banner)
+					termWriter(term, fmt.Sprintf("welcome, %s", user.Name))
+					if result != nil {
+						termWriter(term, result.Error())
+					}
+					termWriter(term, message)
+					termWriter(term, "goodbye\n")
+					log.Println("closing the connection")
+					chanCloser(ch, result != nil)
+				}
+			case <-limit:
+				// Forced timeout, close session
+				return
+			}
+		}
+	case <-limit:
+		// Forced timeout, close session
+		return
 	}
 }
